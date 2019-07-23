@@ -1,0 +1,34 @@
+---
+title: "TMDB 5000 Movie Dataset 分析"
+author: "Yen Lung Wang"
+date: "2019/7/22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 資料來源   
+
+<a href="https://www.kaggle.com/tmdb/tmdb-movie-metadata" title="Title">
+Kaggle dataset: TMDB 5000 Movie Dataset</a>  
+
+## 資料欄位內容
+### movie_metadata.csv
+* id: App ID 
+
+## 分析流程：
+* [資料取得](#資料取得)
+* [資料前處理](#資料前處理)
+* [資料探索](#資料探索)
+* [分析](#分析)
+
+## 欲分析問題
+* [不同類型的 App 之下，是否付費的會得到較高的評分？](#不同類型的-App-之下，是否付費的會得到較高的評分？)
+* [App 類型是否會影響收益？](#App-類型是否會影響收益？)
+
+```{r message=FALSE, warning=FALSE}
+credicts_df <- read.csv('./input/movie_metadata.csv')
+head(credicts_df)
+```
