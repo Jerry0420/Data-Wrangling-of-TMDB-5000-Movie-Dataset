@@ -2,33 +2,237 @@
 title: "TMDB 5000 Movie Dataset 分析"
 author: "Yen Lung Wang"
 date: "2019/7/22"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## 資料來源   
+# 資料來源   
 
 <a href="https://www.kaggle.com/tmdb/tmdb-movie-metadata" title="Title">
 Kaggle dataset: TMDB 5000 Movie Dataset</a>  
 
-## 資料欄位內容
-### movie_metadata.csv
-* id: App ID 
+# 資料欄位內容
+## movie_metadata.csv
+Feature Name            | 描述
+---------------------|----------------------------------------------
+movie_title              | 電影名稱
+duration                 | 片長（分鐘）
+director_name            | 導演名稱
+director_facebook_likes  | 導演臉書專頁按讚數
+actor_1_name             | 主角名稱
+actor_1_facebook_likes   | 主角臉書專頁按讚數
+actor_2_name             | 第二主角名稱
+actor_2_facebook_likes   | 第二主角臉書專頁按讚數
+actor_3_name             | 第三主角名稱
+actor_3_facebook_likes   | 第三主角臉書專頁按讚數
+num_user_for_reviews     | 在 imdb 上給 review 的人數
+num_critic_for_reviews   | 在 imdb 上給 critic review 的人數
+num_voted_users          | 在 imdb 上給 vote 的人數
+cast_total_facebook_likes| 所有卡司的臉書專頁總按讚數
+movie_facebook_likes     | 電影臉書專頁的按讚數
+plot_keywords            | 電影內容的關鍵字：‘avatar’, ‘future’, ‘alien’
+facenumber_in_poster     | 電影海報上出現的角色人數（有露臉）
+color                    | 電影形式：‘Black and White’ 或 ‘Color’
+genres                   | 電影分類：‘Animation’, ‘Comedy’, ‘Romance’, ‘Horror’, ‘Sci-Fi’, ‘Action’, ‘Family’
+title_year               | 電影上映的年代 (1916:2016)
+language                 | 電影支援的語系：English, Arabic, Chinese, French, German, Danish, Italian, Japanese....
+country                  | 電影製造國家
+content_rating           | 電影分級
+aspect_ratio             | 電影畫面長寬比
+movie_imdb_link          | 電影的 imdb 連結
+gross                    | 電影總收入 Dollars
+budget                   | 電影製造成本 Dollars
+imdb_score               | IMDB 分數
 
-## 分析流程：
-* [資料取得](#資料取得)
-* [資料前處理](#資料前處理)
-* [資料探索](#資料探索)
-* [分析](#分析)
+# 分析流程：
+* 資料取得
+* 資料前處理
+* 資料探索
+* 分析
 
-## 欲分析問題
-* [不同類型的 App 之下，是否付費的會得到較高的評分？](#不同類型的-App-之下，是否付費的會得到較高的評分？)
-* [App 類型是否會影響收益？](#App-類型是否會影響收益？)
+# 欲分析問題
+* 票房是否與 IMDb 分數有直接關係？
+* 演員的知名度是否會影響 IMDb 的分數？
 
-```{r message=FALSE, warning=FALSE}
-credicts_df <- read.csv('./input/movie_metadata.csv')
-head(credicts_df)
+# 資料取得
+## 載入 library
+```{r}
+library(ggplot2)
+library(dplyr)
+library(magrittr)
+library(ggrepel)
 ```
+
+## 載入資料
+```{r message=FALSE, warning=FALSE}
+imdb_df <- read.csv('./input/movie_metadata.csv')
+head(imdb_df)
+dim <- dim(imdb_df)
+paste('此資料集共有' , dim[2] , '個 feature, ' , dim[1], '筆資料')
+```
+
+# 資料前處理
+## 數據清理
+### 刪除重複值
+```{r}
+paste('共有' , sum(duplicated(imdb_df)), '筆重複的資料')
+imdb_df <- imdb_df[!duplicated(imdb_df), ]
+dim <- dim(imdb_df)
+paste('刪除重複值後，資料集目前共有', dim[1], '筆資料')
+```
+
+### 處理缺失值
+```{r, fig.height = 5, fig.width = 8}
+colSums(sapply(imdb_df, is.na))
+barplot(colSums(sapply(imdb_df, is.na)), main="Frequency of Missing Value", xlab="Feature", ylab="Frequency")
+```
+
+N/A 最多的 feature 出現在 gross 和 budget
+
+因為筆數過多，將 gross, budget 內 N/A 的資料刪除。
+```{r}
+imdb_df <- imdb_df[!is.na(imdb_df$gross), ]
+imdb_df <- imdb_df[!is.na(imdb_df$budget), ]
+dim(imdb_df)
+paste('將 gross 和 budget 為缺失值的資料刪除後，目前剩下' , dim(imdb_df)[1], '筆資料')
+paste(dim(imdb_df)[1], '筆資料中，尚還有' , dim(imdb_df)[1]-sum(complete.cases(imdb_df)), '筆資料包含缺失值')
+colSums(sapply(imdb_df, is.na))
+```
+
+接著來處理 aspect-ratio 內的缺失值
+```{r}
+table(imdb_df$aspect_ratio)
+```
+
+可看出大部分的 aspect-ration 位於 1.85 和 2.35 ，數量皆高達 1500 以上，接近 2000。
+而因為 缺失值佔的比例太小，在此簡便處理，直接將其刪除。
+
+```{r}
+imdb_df <- imdb_df[!is.na(imdb_df$aspect_ratio), ]
+paste('將 aspect-ratio 為缺失值的資料刪除後，目前剩下' , dim(imdb_df)[1], '筆資料')
+colSums(sapply(imdb_df, is.na))
+```
+
+處理剩餘的缺失值，皆用平均值補上
+```{r}
+imdb_df$facenumber_in_poster[is.na(imdb_df$facenumber_in_poster)] <- round(mean(imdb_df$facenumber_in_poster, na.rm = TRUE))
+imdb_df$actor_3_facebook_likes[is.na(imdb_df$actor_3_facebook_likes)] <- round(mean(imdb_df$actor_3_facebook_likes, na.rm = TRUE))
+imdb_df$num_critic_for_reviews[is.na(imdb_df$num_critic_for_reviews)] <- round(mean(imdb_df$num_critic_for_reviews, na.rm = TRUE))
+imdb_df$actor_1_facebook_likes[is.na(imdb_df$actor_1_facebook_likes)] <- round(mean(imdb_df$actor_1_facebook_likes, na.rm = TRUE))
+imdb_df$actor_2_facebook_likes[is.na(imdb_df$actor_2_facebook_likes)] <- round(mean(imdb_df$actor_2_facebook_likes, na.rm = TRUE))
+colSums(sapply(imdb_df, is.na))
+```
+
+接著，為了後續分析方便，加上 profit, return_on_investment_perc 欄位
+```{r}
+imdb_df$profit <- (imdb_df$gross - imdb_df$budget)
+imdb_df$return_on_investment_perc <- (imdb_df$profit / imdb_df$budget)*100
+head(imdb_df)
+```
+
+# 資料探索
+
+將數值類的 feature 間畫出散步圖觀察趨勢
+```{r, fig.height = 5, fig.width = 8}
+numeric_features <- c()
+for(i in 1:dim(imdb_df)[2])
+{
+  if(is.numeric(imdb_df[,i])|| is.integer(imdb_df[,i]))
+  {
+    numeric_features <- c(numeric_features, i)
+  }
+}
+numeric_features
+pairs(imdb_df[,numeric_features], pch = 19, lower.panel = NULL)
+```
+
+看起來有些 feature 間有趨勢，接著更詳細的看看 correlation matrix 
+```{r}
+corr_matrix <- cor(imdb_df[,numeric_features])
+corr_matrix
+# which(abs(corr_matrix) >= 0.5, arr.ind = T)
+```
+
+由 corr_matrix 中可看出，許多 feature 間的組合都有共線性的問題，會讓 feature 對模型的解釋能力產生影響。
+
+```{r}
+ggplot(imdb_df, aes(title_year)) +
+  geom_bar() +
+  labs(x = "Year movie was released", y = "Movie Count", title = "Histogram of Movie released") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+可看出在 1980 年後，電影的數量有持續的成長。
+
+```{r}
+ggplot(imdb_df, aes(x=imdb_score)) + geom_histogram() +
+  labs(x = "imdb score", y = "Frequency", title = "Frequency of imdb score") + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+可看出 imdb score 大部分分佈在 5.0 ~ 7.5 之間。
+
+```{r}
+imdb_df %>%
+  filter(title_year %in% c(2000:2016)) %>%
+  arrange(desc(profit)) %>%
+  top_n(10, profit) %>%
+  ggplot(aes(x=budget/1000000, y=profit/1000000)) +
+  geom_point(size=0.5) +
+  geom_text_repel(aes(label=movie_title)) +
+  labs(x = "Budget $million", y = "Profit $million", title = "Top 10 Profitable Movies") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+可看出 Avatar 的 profit 遠大於其他電影，但 Budget 也是。
+
+```{r}
+imdb_df %>%
+  filter(budget > 100000) %>%
+  mutate(profit = gross - budget,
+         return_on_investment_perc = (profit/budget)*100) %>%
+  arrange(desc(profit)) %>%
+  top_n(10, profit) %>%
+  ggplot(aes(x=budget/1000000, y = return_on_investment_perc)) + 
+  geom_point(size = 0.5) + 
+  geom_text_repel(aes(label = movie_title), size = 3) + 
+  labs(x = "Budget $million", y = "Percent Return on Investment", title = "10 Most Profitable Movies based on its Return on Investment")
+```
+
+可看出 Star War: Eposode IV - A New Hope 的 ROI 大於其他電影。
+
+# 分析
+## 票房是否與 IMDb 分數有直接關係？
+```{r}
+imdb_df %>%
+  filter(title_year %in% c(2000:2016)) %>%
+  arrange(desc(gross)) %>%
+  top_n(10, gross) %>%
+  ggplot(aes(x=imdb_score, y=gross/1000000)) +
+  geom_point(size=0.5) +
+  geom_text_repel(aes(label=movie_title)) +
+  labs(x = "imdb_score(0~10)", y = "Gross $million", title = "Top 10 Gross Movies") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+票房越高，不代表 IMDb score 越高。兩者並無顯著的直接關係。
+
+## 演員的知名度是否會影響 IMDb 的分數？
+```{r}
+imdb_df %>%
+  filter(title_year %in% c(2000:2016)) %>%
+  arrange(desc(cast_total_facebook_likes)) %>%
+  top_n(10, cast_total_facebook_likes) %>%
+  ggplot(aes(x=imdb_score, y=cast_total_facebook_likes/1000)) +
+  geom_point(size=0.5) +
+  geom_text_repel(aes(label=movie_title)) +
+  labs(x = "imdb_score(0~10)", y = "Facebook likes (thousand)", title = "Top 10 Movies With Famous Actors") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+演員知名度越高，不代表 IMDb score 越高。兩者並無顯著的直接關係。
